@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
@@ -28,7 +29,7 @@ func newBuf(width uint, height uint) *frameBuf {
 	return &p
 }
 
-func changeRow(buf *frameBuf, rownum uint, newrow []rune) error {
+func (buf *frameBuf) changeRow(rownum uint, newrow []rune) error {
 	if rownum > buf.height {
 		return errors.New("row number out of bounds")
 	}
@@ -36,7 +37,7 @@ func changeRow(buf *frameBuf, rownum uint, newrow []rune) error {
 	return nil
 }
 
-func clearBuf(buf *frameBuf) {
+func (buf *frameBuf) clearBuf() {
 	for y := range buf.height {
 		for x := range buf.width {
 			buf.buf[y][x] = ' '
@@ -44,7 +45,7 @@ func clearBuf(buf *frameBuf) {
 	}
 }
 
-func setCell(buf *frameBuf, x uint, y uint, char rune) error {
+func (buf *frameBuf) setCell(x uint, y uint, char rune) error {
 	if x > buf.width {
 		return errors.New("x value out of bounds")
 	} else if y > buf.height {
@@ -73,26 +74,53 @@ func resize(buf **frameBuf, width uint, height uint) {
 	*buf = newBuffer
 }
 
-func main() {
-	fmt.Print("\x1b[?1049h") // alt screen
-  fmt.Print("\x1b[?25l")   // hide cursor
+func (buf *frameBuf) showBuf() {
+	var out strings.Builder
 
-  defer func() {
-    fmt.Print("\x1b[?25h") // show cursor
-    fmt.Print("\x1b[?1049l") // back to normal screen
-  }()
+	for _, line := range buf.buf {
+		out.WriteString(string(line))
+		out.WriteByte('\n')
+	}
 
 	fmt.Print("\x1b[2J\x1b[H")
+	fmt.Println(out.String())
+}
 
+func altMode() {
+	fmt.Print("\x1b[?1049h") // alt screen
+  fmt.Print("\x1b[?25l")   // hide cursor
+	fmt.Print("\x1b[2J\x1b[H")
+}
+
+func normalMode() {
+  fmt.Print("\x1b[?25h") // show cursor
+  fmt.Print("\x1b[?1049l") // back to normal screen
+}
+
+func getSize() (uint, uint, error) {
 	fd := int(os.Stdin.Fd())
 	w, h, err := term.GetSize(fd)
-	if err != nil {panic(err)}
-	buf := newBuf(w, h)
+	return uint(w), uint(h), err 
+
+}
+
+func main() {
+	// set up the terminal
+	altMode()
+	defer normalMode()
+
+	// get screen size
+	w, h, err := getSize()
+	if err != nil {
+		panic(err)
+	}
+
+	// create a buffer
+	buf := newBuf(uint(w), uint(h))
+
+	buf.setCell(5, 5, 's')
+
 	for {
-		fd := int(os.Stdin.Fd())
-		w, h, err := term.GetSize(fd)
-		if err != nil { panic(err) }
-	
 		fmt.Printf("\x1b[%d;%dH%s\n", h-1, w-1, "s")
 		time.Sleep(33 * time.Millisecond)
 	}
